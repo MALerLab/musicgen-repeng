@@ -712,6 +712,55 @@ class StreamingTransformer(StreamingModule):
 
         return x
 
+    def forward_with_control_vectors(self, x: torch.Tensor, control_vectors: tp.Dict, *args, **kwargs):
+        B, T, C = x.shape
+
+        if 'offsets' in self._streaming_state:
+            offsets = self._streaming_state['offsets']
+        else:
+            offsets = torch.zeros(B, dtype=torch.long, device=x.device)
+
+        if self.positional_embedding in ['sin', 'sin_rope']:
+            positions = torch.arange(T, device=x.device).view(1, -1, 1)
+            positions = positions + offsets.view(-1, 1, 1)
+            pos_emb = create_sin_embedding(positions, C, max_period=self.max_period, dtype=x.dtype)
+            x = x + self.positional_scale * pos_emb
+
+        for i, layer in enumerate(self.layers):
+            x = x + torch.Tensor(control_vectors[i]).to(x.device)*0.1
+            x = self._apply_layer(layer, x, *args, **kwargs)
+
+        if self._is_streaming:
+            self._streaming_state['offsets'] = offsets + T
+
+        return x
+    
+    def forward_hiddens(self, x: torch.Tensor, *args, **kwargs):
+        B, T, C = x.shape
+
+        if 'offsets' in self._streaming_state:
+            offsets = self._streaming_state['offsets']
+        else:
+            offsets = torch.zeros(B, dtype=torch.long, device=x.device)
+
+        if self.positional_embedding in ['sin', 'sin_rope']:
+            positions = torch.arange(T, device=x.device).view(1, -1, 1)
+            positions = positions + offsets.view(-1, 1, 1)
+            pos_emb = create_sin_embedding(positions, C, max_period=self.max_period, dtype=x.dtype)
+            x = x + self.positional_scale * pos_emb
+        
+        hidden_states = []
+
+        for layer in self.layers:
+            hidden_states.append(layer.norm1(x)) # Hidden states before layer
+            x = self._apply_layer(layer, x, *args, **kwargs)
+            # hidden_states.append(x) # Hidden states after layer
+
+        if self._is_streaming:
+            self._streaming_state['offsets'] = offsets + T
+
+        return hidden_states
+
     def make_optim_group(self):
         group = {"params": list(self.parameters())}
         if self.lr is not None:
