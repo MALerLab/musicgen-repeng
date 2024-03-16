@@ -727,7 +727,7 @@ class StreamingTransformer(StreamingModule):
             x = x + self.positional_scale * pos_emb
 
         for i, layer in enumerate(self.layers):
-            x = x + torch.Tensor(control_vectors[i]).to(x.device)*0.1
+            x = x + torch.Tensor(control_vectors[i]).to(x.device)
             x = self._apply_layer(layer, x, *args, **kwargs)
 
         if self._is_streaming:
