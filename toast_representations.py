@@ -22,5 +22,5 @@ for path in tqdm(Path('/home/sake/MusicGenRepEng_Dataset_separated').rglob('*.mp
         input_music.cuda(), 
         sr, None, 
         progress=True)
-    rep_vec = torch.stack(rep, dim=1)[:,500:1000].mean(1)
+    rep_vec = torch.stack(rep, dim=1)[:,500:1000]
     torch.save(rep_vec.cpu(), str(path.with_suffix('.pt')).replace('MusicGenRepEng_Dataset_separated', 'MusicGenRepEng_Dataset_hidden_states_30-60_mid10_smallmodel'))
