@@ -712,7 +712,7 @@ class StreamingTransformer(StreamingModule):
 
         return x
 
-    def forward_with_control_vectors(self, x: torch.Tensor, control_vectors: tp.Dict, *args, **kwargs):
+    def forward_with_control_vectors(self, x: torch.Tensor, control_vectors: tp.Dict, coefficient:float, *args, **kwargs):
         B, T, C = x.shape
 
         if 'offsets' in self._streaming_state:
@@ -727,7 +727,8 @@ class StreamingTransformer(StreamingModule):
             x = x + self.positional_scale * pos_emb
 
         for i, layer in enumerate(self.layers):
-            x = x + torch.Tensor(control_vectors[i]).to(x.device) * 1.0
+            if i != 0:
+                x = x + torch.Tensor(control_vectors[i]).to(x.device) * coefficient
             x = self._apply_layer(layer, x, *args, **kwargs)
 
         if self._is_streaming:
@@ -735,7 +736,7 @@ class StreamingTransformer(StreamingModule):
 
         return x
     
-    def forward_hiddens(self, x: torch.Tensor, *args, **kwargs):
+    def forward_with_hiddens(self, x: torch.Tensor, *args, **kwargs):
         B, T, C = x.shape
 
         if 'offsets' in self._streaming_state:
@@ -750,16 +751,13 @@ class StreamingTransformer(StreamingModule):
             x = x + self.positional_scale * pos_emb
         
         hidden_states = []
-
         for layer in self.layers:
-            hidden_states.append(layer.norm1(x)) # Hidden states before layer
+            hidden_states.append(x) # Hidden states before layer
             x = self._apply_layer(layer, x, *args, **kwargs)
             # hidden_states.append(x) # Hidden states after layer
-
         if self._is_streaming:
             self._streaming_state['offsets'] = offsets + T
-
-        return hidden_states
+        return x, hidden_states
 
     def make_optim_group(self):
         group = {"params": list(self.parameters())}
