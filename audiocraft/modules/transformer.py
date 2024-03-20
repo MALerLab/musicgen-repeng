@@ -712,7 +712,7 @@ class StreamingTransformer(StreamingModule):
 
         return x
 
-    def forward_with_control_vectors(self, x: torch.Tensor, control_vectors: tp.Dict, coefficient:float, *args, **kwargs):
+    def forward_with_control_vectors(self, x: torch.Tensor, control_vectors: tp.Dict, coefficient:float, before_layer:bool, *args, **kwargs):
         B, T, C = x.shape
 
         if 'offsets' in self._streaming_state:
@@ -727,16 +727,18 @@ class StreamingTransformer(StreamingModule):
             x = x + self.positional_scale * pos_emb
 
         for i, layer in enumerate(self.layers):
-            if i != 0:
+            if before_layer:
                 x = x + torch.Tensor(control_vectors[i]).to(x.device) * coefficient
             x = self._apply_layer(layer, x, *args, **kwargs)
+            if before_layer is False:
+                x = x + torch.Tensor(control_vectors[i]).to(x.device) * coefficient
 
         if self._is_streaming:
             self._streaming_state['offsets'] = offsets + T
 
         return x
     
-    def forward_with_hiddens(self, x: torch.Tensor, *args, **kwargs):
+    def forward_with_hiddens(self, x: torch.Tensor, before_layer: bool, norm: bool, *args, **kwargs):
         B, T, C = x.shape
 
         if 'offsets' in self._streaming_state:
@@ -752,9 +754,17 @@ class StreamingTransformer(StreamingModule):
         
         hidden_states = []
         for layer in self.layers:
-            hidden_states.append(x) # Hidden states before layer
+            if before_layer: # Hidden states before layer
+                if norm:
+                    hidden_states.append(layer.norm1(x))
+                else:
+                    hidden_states.append(x)
             x = self._apply_layer(layer, x, *args, **kwargs)
-            # hidden_states.append(x) # Hidden states after layer
+            if before_layer is False: # Hidden states before layer
+                if norm:
+                    hidden_states.append(layer.norm1(x))
+                else:
+                    hidden_states.append(x)
         if self._is_streaming:
             self._streaming_state['offsets'] = offsets + T
         return x, hidden_states
