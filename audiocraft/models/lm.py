@@ -1293,7 +1293,10 @@ class LMModel(StreamingModule):
                 positive_coefs.append(True)
             else:
                 positive_coefs.append(False)
-            coef_offsets.append(coefficient/ramp_length)
+            if ramp_length == 0:
+                coef_offsets.append(0.0)
+            else:
+                coef_offsets.append(coefficient/ramp_length)
 
         with self.streaming():
             unconditional_state = self.get_streaming_state()

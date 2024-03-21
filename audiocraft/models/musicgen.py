@@ -545,7 +545,7 @@ class MusicGen(BaseGenModel):
             gen_tokens = torch.cat(all_tokens, dim=-1)
         return gen_tokens
     
-    def generate_with_control_vectors(self, descriptions: tp.List[str], control_vectors: tp.List[tp.Dict], coefficients: tp.List[float], sustains: tp.List[float], ramps: tp.List[float],before_layer:bool = False, progress: bool = False, return_tokens: bool = False) \
+    def generate_with_control_vectors(self, descriptions: tp.List[str], control_vectors: tp.List[tp.Dict], coefficients: tp.List[float], sustains: tp.List[float], ramps: tp.List[float], before_layer:bool = False, progress: bool = False, return_tokens: bool = False) \
             -> tp.Union[torch.Tensor, tp.Tuple[torch.Tensor, torch.Tensor]]:
         """Generate samples conditioned on text.
 
