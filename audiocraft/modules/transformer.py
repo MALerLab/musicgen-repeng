@@ -712,7 +712,7 @@ class StreamingTransformer(StreamingModule):
 
         return x
 
-    def forward_with_control_vectors(self, x: torch.Tensor, control_vectors: tp.Dict, coefficient:float, before_layer:bool, *args, **kwargs):
+    def forward_with_control_vectors(self, x: torch.Tensor, control_vectors: tp.List[tp.Dict], coefficients:tp.List[float], before_layer:bool, *args, **kwargs):
         B, T, C = x.shape
 
         if 'offsets' in self._streaming_state:
@@ -728,10 +728,12 @@ class StreamingTransformer(StreamingModule):
 
         for i, layer in enumerate(self.layers):
             if before_layer:
-                x = x + torch.Tensor(control_vectors[i]).to(x.device) * coefficient
+                for control_vector, coefficient in zip(control_vectors, coefficients):
+                    x = x + torch.Tensor(control_vector[i]).to(x.device) * coefficient
             x = self._apply_layer(layer, x, *args, **kwargs)
             if before_layer is False:
-                x = x + torch.Tensor(control_vectors[i]).to(x.device) * coefficient
+                for control_vector, coefficient in zip(control_vectors, coefficients):
+                    x = x + torch.Tensor(control_vector[i]).to(x.device) * coefficient
 
         if self._is_streaming:
             self._streaming_state['offsets'] = offsets + T

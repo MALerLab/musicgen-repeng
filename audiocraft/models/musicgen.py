@@ -455,7 +455,7 @@ class MusicGen(BaseGenModel):
         return hidden_states_list
 
     def _generate_tokens_with_control_vectors(self, attributes: tp.List[ConditioningAttributes],
-                         prompt_tokens: tp.Optional[torch.Tensor], control_vectors: tp.Dict, coefficient: float, before_layer:bool, progress: bool = False) -> torch.Tensor:
+                         prompt_tokens: tp.Optional[torch.Tensor], control_vectors: tp.List[tp.Dict], coefficients: tp.List[float], sustains: tp.List[float], ramps: tp.List[float],before_layer:bool, progress: bool = False) -> torch.Tensor:
         """Generate discrete audio tokens given audio prompt and/or conditions.
 
         Args:
@@ -490,7 +490,7 @@ class MusicGen(BaseGenModel):
             # generate by sampling from LM, simple case.
             with self.autocast:
                 gen_tokens = self.lm.generate_with_control_vectors(
-                    control_vectors, coefficient, before_layer,
+                    control_vectors, coefficients, sustains, ramps, before_layer,
                     prompt_tokens, attributes,
                     callback=callback, max_gen_len=total_gen_len, **self.generation_params)
 
@@ -531,7 +531,7 @@ class MusicGen(BaseGenModel):
                         [None], [0.])
                 with self.autocast:
                     gen_tokens = self.lm.generate_with_control_vectors(
-                        control_vectors, coefficient, before_layer,
+                        control_vectors, coefficients, sustains, ramps, before_layer,
                         prompt_tokens, attributes,
                         callback=callback, max_gen_len=max_gen_len, **self.generation_params)
                 if prompt_tokens is None:
@@ -545,7 +545,7 @@ class MusicGen(BaseGenModel):
             gen_tokens = torch.cat(all_tokens, dim=-1)
         return gen_tokens
     
-    def generate_with_control_vectors(self, descriptions: tp.List[str], control_vectors: tp.Dict, coefficient: float, before_layer:bool = False, progress: bool = False, return_tokens: bool = False) \
+    def generate_with_control_vectors(self, descriptions: tp.List[str], control_vectors: tp.List[tp.Dict], coefficients: tp.List[float], sustains: tp.List[float], ramps: tp.List[float],before_layer:bool = False, progress: bool = False, return_tokens: bool = False) \
             -> tp.Union[torch.Tensor, tp.Tuple[torch.Tensor, torch.Tensor]]:
         """Generate samples conditioned on text.
 
@@ -556,13 +556,13 @@ class MusicGen(BaseGenModel):
         """
         attributes, prompt_tokens = self._prepare_tokens_and_attributes(descriptions, None)
         assert prompt_tokens is None
-        tokens = self._generate_tokens_with_control_vectors(attributes, prompt_tokens, control_vectors, coefficient, before_layer, progress)
+        tokens = self._generate_tokens_with_control_vectors(attributes, prompt_tokens, control_vectors, coefficients, sustains, ramps, before_layer, progress)
         if return_tokens:
             return self.generate_audio(tokens), tokens
         return self.generate_audio(tokens)
     
     def generate_continuation_with_control_vectors(self, prompt: torch.Tensor, prompt_sample_rate: int, 
-                                                   control_vectors: tp.Dict, coefficient: float, before_layer:bool = False,
+                                                   control_vectors: tp.List[tp.Dict], coefficients: tp.List[float], sustains: tp.List[float], ramps: tp.List[float], before_layer:bool = False,
                                                     descriptions: tp.Optional[tp.List[tp.Optional[str]]] = None,
                                                     progress: bool = False, return_tokens: bool = False) \
             -> tp.Union[torch.Tensor, tp.Tuple[torch.Tensor, torch.Tensor]]:
@@ -584,7 +584,7 @@ class MusicGen(BaseGenModel):
             descriptions = [None] * len(prompt)
         attributes, prompt_tokens = self._prepare_tokens_and_attributes(descriptions, prompt)
         assert prompt_tokens is not None
-        tokens = self._generate_tokens_with_control_vectors(attributes, prompt_tokens, control_vectors, coefficient, before_layer, progress)
+        tokens = self._generate_tokens_with_control_vectors(attributes, prompt_tokens, control_vectors, coefficients, sustains, ramps, before_layer, progress)
         if return_tokens:
             return self.generate_audio(tokens), tokens
         return self.generate_audio(tokens)
