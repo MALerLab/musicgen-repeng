@@ -12,14 +12,14 @@ model.set_generation_params(
     duration=0.02
 )
 
-for prompt in ["techno", "jazz", "pop", "hip hop", "electronica", "rnb", "funk", "classic"]:
+for prompt in ["techno", "jazz", "pop", "hip hop", "rock", "electronica", "rnb", "funk", "classic"]:
     for path in tqdm(Path('/home/sake/MusicGenRepEng_Dataset_separated').rglob('*.mp3')):
         print("Representing: ", path)
-        out_path = str(path).replace('MusicGenRepEng_Dataset_separated', f'MusicGenRepEng_Dataset_50ms_energetic_sleepy_mediummodel_{prompt.replace(" ","_")}_norm_b4layer')
+        out_path = str(path).replace('MusicGenRepEng_Dataset_separated', f'MusicGenRepEng_Dataset_50ms_happy_scary_mediummodel_norm_b4layer/{prompt.replace(" ","_")}')
         Path(out_path).parent.mkdir(parents=True, exist_ok=True)
         music, sr = torchaudio.load(str(path))
-        hidden_states = model.get_hidden_states(music[:,:int(sr*0.02)].repeat(2,1,1), sr, [f"{prompt}, energetic", f"{prompt}, sleepy"], before_layer=False, norm=True)
-        torch.save(hidden_states, str(path.with_suffix('.pt')).replace('MusicGenRepEng_Dataset_separated', f'MusicGenRepEng_Dataset_50ms_energetic_sleepy_mediummodel_{prompt.replace(" ","_")}_norm_b4layer'))
+        hidden_states = model.get_hidden_states(music[:,:int(sr*0.02)].repeat(2,1,1), sr, [f"{prompt}, happy", f"{prompt}, scary"], before_layer=False, norm=True)
+        torch.save(hidden_states, str(path.with_suffix('.pt')).replace('MusicGenRepEng_Dataset_separated', f'MusicGenRepEng_Dataset_50ms_happy_scary_mediummodel_norm_b4layer/{prompt.replace(" ","_")}'))
         # input_music = music[:, 30*sr:50*sr]
         # rep = model.get_hidden_states(
         #     input_music.cuda(), 
