@@ -635,6 +635,8 @@ class LMModel(StreamingModule):
             out = self.out_norm(out)
         logits = torch.stack([self.linears[k](out) for k in range(K)], dim=1)  # [B, K, S, card]
 
+        if before_layer is False and norm: # Hidden states before layer
+            hiddens[-1] = self.out_norm(hiddens[-1])
         # remove the prefix from the model outputs
         if len(self.fuser.fuse2cond['prepend']) > 0:
             logits = logits[:, :, -S:]
@@ -1025,8 +1027,14 @@ class LMModel(StreamingModule):
                     cfg_coef=cfg_coef, two_step_cfg=two_step_cfg)
                 # ensure the tokens that should be masked are properly set to special_token_id
                 # as the model never output special_token_id
+                valid_mask = mask[..., offset:offset+1].expand(B, -1, -1)
+                next_token[~valid_mask] = self.special_token_id
                 # ensure we don't overwrite prompt tokens, we only write over unknown tokens
                 # (then mask tokens should be left as is as well, which is correct)
+                gen_sequence[..., offset:offset+1] = torch.where(
+                    gen_sequence[..., offset:offset+1] == unknown_token,
+                    next_token, gen_sequence[..., offset:offset+1]
+                )
                 print(hidden_states.shape)
                 hidden_states_list.append(hidden_states)
                 prev_offset = offset
@@ -1313,7 +1321,7 @@ class LMModel(StreamingModule):
                     assert not (curr_sequence == unknown_token).any()
                 # sample next token from the model, next token shape is [B, K, 1]
                 next_token = self._sample_next_token_with_control_vectors(
-                    curr_sequence, control_vectors, coefficients, before_layer, cfg_conditions, unconditional_state, use_sampling, temp, top_k, top_p,
+                    curr_sequence, control_vectors, coefficients, offset-start_offset_sequence, before_layer, cfg_conditions, unconditional_state, use_sampling, temp, top_k, top_p,
                     cfg_coef=cfg_coef, two_step_cfg=two_step_cfg)
                 for i in range(len(coefficients)):
                     if coef_rampings[i]:
@@ -1367,6 +1375,7 @@ class LMModel(StreamingModule):
                            sequence: torch.Tensor,
                            control_vectors: tp.List[tp.Dict],
                            coefficients: tp.List[float],
+                           step: int,
                            before_layer:bool,
                            cfg_conditions: CFGConditions,
                            unconditional_state: State,
@@ -1400,10 +1409,10 @@ class LMModel(StreamingModule):
         if two_step_cfg and cfg_conditions != {}:
             assert isinstance(cfg_conditions, tuple), type(cfg_conditions)
             condition_tensors, null_condition_tensors = cfg_conditions
-            cond_logits = model.forward_with_control_vectors(sequence, control_vectors, coefficients, conditions=[], condition_tensors=condition_tensors)
+            cond_logits = model.forward_with_control_vectors(sequence, control_vectors, coefficients, step, conditions=[], condition_tensors=condition_tensors)
             state = self.get_streaming_state()
             self.set_streaming_state(unconditional_state)
-            uncond_logits = model.forward_with_control_vectors(sequence, control_vectors, coefficients, conditions=[], condition_tensors=null_condition_tensors)
+            uncond_logits = model.forward_with_control_vectors(sequence, control_vectors, coefficients, step, conditions=[], condition_tensors=null_condition_tensors)
             unconditional_state.update(self.get_streaming_state())
             self.set_streaming_state(state)
             logits = uncond_logits + (cond_logits - uncond_logits) * self.cfg_coef
@@ -1414,7 +1423,7 @@ class LMModel(StreamingModule):
                 # Preparing for CFG, predicting both conditional and unconditional logits.
                 sequence = torch.cat([sequence, sequence], dim=0)
             all_logits = model.forward_with_control_vectors(
-                sequence, control_vectors, coefficients, before_layer,
+                sequence, control_vectors, coefficients, step, before_layer,
                 conditions=[], condition_tensors=condition_tensors)
             if condition_tensors:
                 cond_logits, uncond_logits = all_logits.split(B, dim=0)  # [B, K, T, card]
@@ -1439,7 +1448,7 @@ class LMModel(StreamingModule):
 
         return next_token
     
-    def forward_with_control_vectors(self, sequence: torch.Tensor, control_vectors: tp.List[tp.Dict], coefficients: tp.List[float], before_layer:bool,
+    def forward_with_control_vectors(self, sequence: torch.Tensor, control_vectors: tp.List[tp.Dict], coefficients: tp.List[float], step:int, before_layer:bool,
                 conditions: tp.List[ConditioningAttributes],
                 condition_tensors: tp.Optional[ConditionTensors] = None,
                 stage: int = -1) -> torch.Tensor:
@@ -1476,7 +1485,7 @@ class LMModel(StreamingModule):
 
         input_, cross_attention_input = self.fuser(input_, condition_tensors)
 
-        out = self.transformer.forward_with_control_vectors(input_, control_vectors, coefficients, before_layer, cross_attention_src=cross_attention_input,
+        out = self.transformer.forward_with_control_vectors(input_, control_vectors, coefficients, step, before_layer, cross_attention_src=cross_attention_input,
                                src_mask=(self.attn_mask_per_stage[stage] if stage >= 0 else None))
         if self.out_norm:
             out = self.out_norm(out)

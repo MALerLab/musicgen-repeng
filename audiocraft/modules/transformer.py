@@ -712,7 +712,7 @@ class StreamingTransformer(StreamingModule):
 
         return x
 
-    def forward_with_control_vectors(self, x: torch.Tensor, control_vectors: tp.List[tp.Dict], coefficients:tp.List[float], before_layer:bool, *args, **kwargs):
+    def forward_with_control_vectors(self, x: torch.Tensor, control_vectors: tp.List[tp.Dict], coefficients:tp.List[float], step, before_layer:bool, *args, **kwargs):
         B, T, C = x.shape
 
         if 'offsets' in self._streaming_state:
@@ -728,12 +728,14 @@ class StreamingTransformer(StreamingModule):
 
         for i, layer in enumerate(self.layers):
             if before_layer:
+                # cocoeff = 1 - (step%50) / 50
                 for control_vector, coefficient in zip(control_vectors, coefficients):
-                    x = x + torch.Tensor(control_vector[i]).to(x.device) * coefficient
+                    x = x + torch.Tensor(control_vector[i]).to(x.device) * coefficient # * cocoeff
             x = self._apply_layer(layer, x, *args, **kwargs)
             if before_layer is False:
+                cocoeff = 1 - (step%50) / 50
                 for control_vector, coefficient in zip(control_vectors, coefficients):
-                    x = x + torch.Tensor(control_vector[i]).to(x.device) * coefficient
+                    x = x + torch.Tensor(control_vector[i]).to(x.device) * coefficient * (1 - i/len(self.layers)) * cocoeff
 
         if self._is_streaming:
             self._streaming_state['offsets'] = offsets + T
@@ -755,18 +757,21 @@ class StreamingTransformer(StreamingModule):
             x = x + self.positional_scale * pos_emb
         
         hidden_states = []
-        for layer in self.layers:
+        for i, layer in enumerate(self.layers):
             if before_layer: # Hidden states before layer
                 if norm:
-                    hidden_states.append(layer.norm1(x))
+                    hidden_states.append(layer.norm1(x.clone()).detach())
                 else:
-                    hidden_states.append(x)
+                    hidden_states.append(x.clone().detach())
             x = self._apply_layer(layer, x, *args, **kwargs)
-            if before_layer is False: # Hidden states before layer
+            if before_layer is False: # Hidden states after layer
                 if norm:
-                    hidden_states.append(layer.norm1(x))
+                    if i == len(self.layers)-1:
+                        hidden_states.append(x.clone())
+                    else:
+                        hidden_states.append(self.layers[i+1].norm1(x.clone()).detach())
                 else:
-                    hidden_states.append(x)
+                    hidden_states.append(x.clone().detach())
         if self._is_streaming:
             self._streaming_state['offsets'] = offsets + T
         return x, hidden_states
