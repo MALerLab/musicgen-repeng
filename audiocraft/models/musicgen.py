@@ -360,6 +360,21 @@ class MusicGen(BaseGenModel):
         return hidden_states_list
     
     @torch.no_grad()
+    def get_hidden_states_no_continuation(self, descriptions: tp.List[str], before_layer: bool = False, norm: bool = True, progress: bool = False) \
+            -> tp.Union[torch.Tensor, tp.Tuple[torch.Tensor, torch.Tensor]]:
+        """Generate samples conditioned on text.
+
+        Args:
+            descriptions (list of str): A list of strings used as text conditioning.
+            progress (bool, optional): Flag to display progress of the generation process. Defaults to False.
+        """
+        attributes, prompt_tokens = self._prepare_tokens_and_attributes(descriptions, None)
+        assert prompt_tokens is None
+        hidden_states_list = self._get_hiddens(attributes, prompt_tokens, before_layer, norm, progress)
+
+        return hidden_states_list
+    
+    @torch.no_grad()
     def _get_hiddens(self, attributes: tp.List[ConditioningAttributes],
                         prompt_tokens: tp.Optional[torch.Tensor], before_layer: bool, norm: bool, progress: bool = False) -> torch.Tensor:
         """Generate discrete audio tokens given audio prompt and/or conditions.
@@ -395,11 +410,11 @@ class MusicGen(BaseGenModel):
         if self.duration <= self.max_duration:
             # generate by sampling from LM, simple case.
             with self.autocast:
-                if prompt_tokens is None:
-                    hidden_states_list = self.lm.get_hiddens_teacher_forcing(
-                        prompt_tokens, attributes, before_layer, norm,
-                        callback=callback, max_gen_len=total_gen_len, **self.generation_params)
-                else:
+                # if prompt_tokens is None:
+                #     hidden_states_list = self.lm.get_hiddens_teacher_forcing(
+                #         prompt_tokens, attributes, before_layer, norm,
+                #         callback=callback, max_gen_len=total_gen_len, **self.generation_params)
+                # else:
                     hidden_states_list = self.lm.get_hiddens_from_text(
                         prompt_tokens, attributes, before_layer, norm,
                         callback=callback, max_gen_len=total_gen_len, **self.generation_params)

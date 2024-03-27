@@ -725,17 +725,16 @@ class StreamingTransformer(StreamingModule):
             positions = positions + offsets.view(-1, 1, 1)
             pos_emb = create_sin_embedding(positions, C, max_period=self.max_period, dtype=x.dtype)
             x = x + self.positional_scale * pos_emb
-
         for i, layer in enumerate(self.layers):
-            if before_layer:
+            if before_layer and i < 24:
                 # cocoeff = 1 - (step%50) / 50
                 for control_vector, coefficient in zip(control_vectors, coefficients):
                     x = x + torch.Tensor(control_vector[i]).to(x.device) * coefficient # * cocoeff
             x = self._apply_layer(layer, x, *args, **kwargs)
-            if before_layer is False:
+            if before_layer is False and i < 24:
                 cocoeff = 1 - (step%50) / 50
                 for control_vector, coefficient in zip(control_vectors, coefficients):
-                    x = x + torch.Tensor(control_vector[i]).to(x.device) * coefficient * (1 - i/len(self.layers)) * cocoeff
+                    x = x + torch.Tensor(control_vector[i]).to(x.device) * coefficient * cocoeff # * (1 - i/len(self.layers))
 
         if self._is_streaming:
             self._streaming_state['offsets'] = offsets + T

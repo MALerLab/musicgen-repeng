@@ -112,6 +112,6 @@ def get_directions_each_layer(path):
 
     return directions
 
-directions = get_directions_each_layer('/home/sake/MusicGenRepEng_Dataset_conti60ms_energy_mediummodel_norm_nob4layer')
+directions = get_directions_each_layer('/home/sake/MusicGenRepEng_Dataset_300ms_energy_largemodel_norm_nob4layer')
 
-torch.save(directions, '/home/sake/MusicGenRepEng_Dataset_conti60ms_energy_mediummodel_norm_nob4layer_directions.pth')
+torch.save(directions, '/home/sake/MusicGenRepEng_Dataset_300ms_energy_largemodel_norm_nob4layer_directions.pth')

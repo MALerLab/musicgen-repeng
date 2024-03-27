@@ -1011,7 +1011,7 @@ class LMModel(StreamingModule):
             unconditional_state = self.get_streaming_state()
             prev_offset = 0
             gen_sequence_len = gen_sequence.shape[-1]  # gen_sequence shape is [B, K, S]
-            print("!!",start_offset_sequence, gen_sequence_len, gen_sequence.shape)
+            # print("!!",start_offset_sequence, gen_sequence_len, gen_sequence.shape)
             for offset in range(start_offset_sequence, gen_sequence_len):
                 # get current sequence (note that the streaming API is providing the caching over previous offsets)
                 curr_sequence = gen_sequence[..., prev_offset:offset]
@@ -1035,7 +1035,7 @@ class LMModel(StreamingModule):
                     gen_sequence[..., offset:offset+1] == unknown_token,
                     next_token, gen_sequence[..., offset:offset+1]
                 )
-                print(hidden_states.shape)
+                # print(hidden_states.shape)
                 hidden_states_list.append(hidden_states)
                 prev_offset = offset
                 if callback is not None:

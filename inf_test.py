@@ -33,9 +33,9 @@ sustain = 1500
 ramp = 0
 
 cv_paths = ['/home/sake/MusicGenRepEng_Dataset_conti60ms_energy_largemodel_norm_nob4layer_directions.pth', '/home/sake/MusicGenRepEng_Dataset_20ms_energy_largemodel_norm_nob4layer_directions.pth']
-grid_names = ["LARGE_3TOK_ENERGY_AFTERLAYER_NORMED_F24LAYERS_50ITERDECAY", "LARGE_1TOK_ENERGY_AFTERLAYER_NORMED_F24LAYERS_50ITERDECAY"]
+grid_names = ["TEST", "LARGE_1TOK_ENERGY_AFTERLAYER_NORMED_F24LAYERS_50ITERDECAY"]
 
-for i in range(2):
+for i in range(1):
     energy_directions = torch.load(cv_paths[i])
     grid_name = grid_names[i]
 
