@@ -572,6 +572,32 @@ class StreamingTransformerLayer(nn.TransformerEncoderLayer):
                         self._cross_attention_block(src, cross_attention_src)))
             x = self.norm2(x + self.layer_scale_2(self._ff_block(x)))
         return x
+    
+    def forward_with_control_vectors(self, src: torch.Tensor, control_vector, coefficient:float, layer_weight, src_mask: tp.Optional[torch.Tensor] = None,  # type: ignore
+                src_key_padding_mask: tp.Optional[torch.Tensor] = None,
+                cross_attention_src: tp.Optional[torch.Tensor] = None):
+        if self.cross_attention is None:
+            assert cross_attention_src is None
+        else:
+            assert cross_attention_src is not None
+        x = src
+        if self.norm_first:
+            x = x + self.layer_scale_1(
+                self._sa_block(self.norm1(x) + torch.Tensor(control_vector).to(x.device) * coefficient * layer_weight, src_mask, src_key_padding_mask))
+            if cross_attention_src is not None:
+                x = x + self.layer_scale_cross(
+                    self._cross_attention_block(
+                        self.norm_cross(x), cross_attention_src))
+            x = x + self.layer_scale_2(self._ff_block(self.norm2(x)))
+        else:
+            x = self.norm1(x + self.layer_scale_1(
+                self._sa_block(x, src_mask, src_key_padding_mask)))
+            if cross_attention_src is not None:
+                x = self.norm_cross(
+                    x + self.layer_scale_cross(
+                        self._cross_attention_block(src, cross_attention_src)))
+            x = self.norm2(x + self.layer_scale_2(self._ff_block(x)))
+        return x
 
 
 class StreamingTransformer(StreamingModule):
@@ -726,16 +752,29 @@ class StreamingTransformer(StreamingModule):
             pos_emb = create_sin_embedding(positions, C, max_period=self.max_period, dtype=x.dtype)
             x = x + self.positional_scale * pos_emb
         for i, layer in enumerate(self.layers):
-            if before_layer and i < 24:
-                # cocoeff = 1 - (step%50) / 50
-                for control_vector, coefficient in zip(control_vectors, coefficients):
-                    x = x + torch.Tensor(control_vector[i]).to(x.device) * coefficient # * cocoeff
-            x = self._apply_layer(layer, x, *args, **kwargs)
-            if before_layer is False and i < 24:
-                cocoeff = 1 - (step%50) / 50
-                for control_vector, coefficient in zip(control_vectors, coefficients):
-                    x = x + torch.Tensor(control_vector[i]).to(x.device) * coefficient * cocoeff # * (1 - i/len(self.layers))
-
+            # if before_layer: # and i < 24:
+            #     # cocoeff = 1
+            #     # cocoeff *= 1 - (step%50) / 50
+            #     # cocoeff *= 1 - (i/48)
+            #     # cocoeff *= (i/48 + 1)/2
+            #     for control_vector, coefficient in zip(control_vectors, coefficients):
+            #         # if i == 0:
+            #         #     i = 47
+            #         x = x + torch.Tensor(control_vector[i]).to(x.device) * coefficient # * cocoeff
+            if i == 0:
+                x = layer(x, *args, **kwargs)
+            else:
+                x = layer.forward_with_control_vectors(x, control_vector=control_vectors[0][i-1], layer_weight=control_vectors[1][i-1], coefficient=coefficients[0], *args, **kwargs)
+            # if before_layer is False: # and i != 47: # and i < 24:
+            #     cocoeff = 1
+            #     # cocoeff *= 1 - (step%50) / 50
+            #     # cocoeff *= 1 - (i/48)
+            #     # cocoeff *= (i/48 + 1)/2
+            #     import random
+            #     cocoeff *= random.random()
+            #     for control_vector, coefficient in zip(control_vectors, coefficients):
+            #         x = x + torch.Tensor(control_vector[i]).to(x.device) * coefficient * cocoeff # * (1 - i/len(self.layers))
+            
         if self._is_streaming:
             self._streaming_state['offsets'] = offsets + T
 
@@ -766,7 +805,8 @@ class StreamingTransformer(StreamingModule):
             if before_layer is False: # Hidden states after layer
                 if norm:
                     if i == len(self.layers)-1:
-                        hidden_states.append(x.clone())
+                        # hidden_states.append(x.clone())
+                        continue
                     else:
                         hidden_states.append(self.layers[i+1].norm1(x.clone()).detach())
                 else:

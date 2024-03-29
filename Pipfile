@@ -26,6 +26,7 @@ gradio = "*"
 torchmetrics = "*"
 encodec = "*"
 protobuf = "*"
+natsort = "*"
 
 [dev-packages]
 

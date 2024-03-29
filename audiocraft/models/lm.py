@@ -636,12 +636,13 @@ class LMModel(StreamingModule):
         logits = torch.stack([self.linears[k](out) for k in range(K)], dim=1)  # [B, K, S, card]
 
         if before_layer is False and norm: # Hidden states before layer
-            hiddens[-1] = self.out_norm(hiddens[-1])
+            # hiddens[-1] = self.out_norm(hiddens[-1])
+            hiddens.append(out.detach())
         # remove the prefix from the model outputs
         if len(self.fuser.fuse2cond['prepend']) > 0:
             logits = logits[:, :, -S:]
 
-        return logits, torch.stack(hiddens, dim=1).squeeze(2)  # [B, K, S, card]
+        return logits, torch.stack(hiddens, dim=1).cpu()#.squeeze(2)  # [B, K, S, card]
     
     def _next_hidden_states(self,
                            sequence: torch.Tensor,
@@ -888,7 +889,7 @@ class LMModel(StreamingModule):
                     assert not (curr_sequence == unknown_token).any()
                 # sample next token from the model, next token shape is [B, K, 1]
                 hidden_states = self._next_hidden_states_teacher_forcing(
-                    curr_sequence, before_layer, norm, cfg_conditions, unconditional_state,
+                    curr_sequence, before_layer, norm, cfg_conditions, unconditional_state, use_sampling=True,
                     cfg_coef=cfg_coef, two_step_cfg=two_step_cfg)
                 # ensure the tokens that should be masked are properly set to special_token_id
                 # as the model never output special_token_id
@@ -918,6 +919,10 @@ class LMModel(StreamingModule):
                 norm: bool = True,
                 num_samples: tp.Optional[int] = None,
                 max_gen_len: int = 256,
+                use_sampling: bool = True,
+                temp: float = 1.0,
+                top_k: int = 250,
+                top_p: float = 0.0,
                 cfg_coef: tp.Optional[float] = None,
                 two_step_cfg: tp.Optional[bool] = None,
                 remove_prompts: bool = False,
@@ -1023,7 +1028,7 @@ class LMModel(StreamingModule):
                     assert not (curr_sequence == unknown_token).any()
                 # sample next token from the model, next token shape is [B, K, 1]
                 next_token, hidden_states = self._next_hidden_states(
-                    curr_sequence, before_layer, norm, cfg_conditions, unconditional_state,
+                    curr_sequence, before_layer, norm, cfg_conditions, unconditional_state, use_sampling, temp, top_k, top_p,
                     cfg_coef=cfg_coef, two_step_cfg=two_step_cfg)
                 # ensure the tokens that should be masked are properly set to special_token_id
                 # as the model never output special_token_id
@@ -1164,7 +1169,7 @@ class LMModel(StreamingModule):
                     assert not (curr_sequence == unknown_token).any()
                 # sample next token from the model, next token shape is [B, K, 1]
                 hidden_states = self._next_hidden_states(
-                    curr_sequence, cfg_conditions, unconditional_state,
+                    curr_sequence, cfg_conditions, unconditional_state, use_sampling=True,
                     cfg_coef=cfg_coef, two_step_cfg=two_step_cfg)
                 # ensure the tokens that should be masked are properly set to special_token_id
                 # as the model never output special_token_id
@@ -1489,6 +1494,9 @@ class LMModel(StreamingModule):
                                src_mask=(self.attn_mask_per_stage[stage] if stage >= 0 else None))
         if self.out_norm:
             out = self.out_norm(out)
+
+        out = out + torch.Tensor(control_vectors[0][47]).to(out.device) * coefficients[0] * control_vectors[1][47]
+
         logits = torch.stack([self.linears[k](out) for k in range(K)], dim=1)  # [B, K, S, card]
 
         # remove the prefix from the model outputs
